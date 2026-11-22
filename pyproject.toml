@@ -1,0 +1,31 @@
+[project]
+name = "semantic-cache-assistant"
+version = "0.1.0"
+description = "Semantic caching assistant using FastAPI, Redis, and Groq"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.165.0",
+    "groq>=1.7.0",
+    "pandas>=3.1.1",
+    "pydantic-settings>=2.16.3",
+    "python-dotenv>=1.2.4",
+    "redis>=8.1.0",
+    "redisvl>=0.32.1",
+    "sentence-transformers>=6.3.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.0,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
