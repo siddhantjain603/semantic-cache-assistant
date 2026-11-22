@@ -1,6 +1,5 @@
 
 import redis
-from sentence_transformers import SentenceTransformer
 
 from backend.app.core.config import get_settings
 
@@ -22,6 +21,8 @@ class ApplicationResources:
         print("Redis connection initialized.")
 
     def initialize_embedding_model(self):
+        from sentence_transformers import SentenceTransformer
+
         self.embedding_model = SentenceTransformer(
             self.settings.EMBEDDING_MODEL
         )

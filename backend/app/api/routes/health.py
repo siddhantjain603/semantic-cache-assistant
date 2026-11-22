@@ -1,3 +1,7 @@
+
+from typing import Annotated
+
+import redis
 from fastapi import APIRouter, Depends
 
 from backend.app.dependencies.resources import ApplicationResources, resources
@@ -12,14 +16,16 @@ def get_resources() -> ApplicationResources:
 
 @router.get("/health", response_model=HealthResponse)
 def health_check(
-    app_resources: ApplicationResources = Depends(get_resources),
+    app_resources: Annotated[
+        ApplicationResources, Depends(get_resources)
+    ],
 ):
     redis_status = "connected"
     embedding_status = "loaded"
 
     try:
         app_resources.redis_client.ping()
-    except Exception:
+    except redis.exceptions.RedisError:
         redis_status = "unavailable"
 
     if app_resources.embedding_model is None:
