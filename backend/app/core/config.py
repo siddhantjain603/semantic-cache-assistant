@@ -28,6 +28,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    LLM_SYSTEM_PROMPT: str = (
+        "You are a helpful AI assistant. "
+        "Provide accurate, clear, and concise answers."
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:
