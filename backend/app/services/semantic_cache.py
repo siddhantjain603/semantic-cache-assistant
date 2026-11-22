@@ -54,3 +54,40 @@ class SemanticCacheService:
         )
 
         return results
+    
+    def get_entries(self, offset: int = 0, limit: int = 20) -> dict:
+        if self.cache is None:
+            raise RuntimeError("Semantic cache is not initialized.")
+
+        from redisvl.query import FilterQuery
+
+        query = FilterQuery("*").return_fields(
+            "prompt",
+            "response",
+            "inserted_at",
+            "updated_at",
+        )
+
+        query.paging(offset=offset, num=limit)
+
+        results = self.cache._index.query(query)
+
+        entries = [
+            {
+                "id": result["id"],
+                "question": result["prompt"],
+                "answer": result["response"],
+                "inserted_at": float(result["inserted_at"]),
+                "updated_at": float(result["updated_at"]),
+            }
+            for result in results
+        ]
+
+        return {
+            "entries": entries,
+            "returned_entries": len(entries),
+            "offset": offset,
+            "limit": limit,
+        }
+
+

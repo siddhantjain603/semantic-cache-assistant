@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from backend.app.api.routes.analytics import router as analytics_router
+from backend.app.api.routes.cache import router as cache_router
 from backend.app.api.routes.chat import (
     chat_service,
 )
@@ -37,3 +39,5 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(chat_router)
+app.include_router(analytics_router)
+app.include_router(cache_router)
