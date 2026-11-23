@@ -1,4 +1,4 @@
-
+from backend.app.core.exceptions import ServiceUnavailableError
 from backend.app.dependencies.resources import resources
 
 
@@ -10,7 +10,7 @@ class AnalyticsService:
         redis_client = resources.redis_client
 
         if redis_client is None:
-            raise RuntimeError("Redis client is not initialized.")
+            raise ServiceUnavailableError("Redis client is not initialized.")
 
         pipeline = redis_client.pipeline(transaction=True)
 
@@ -34,7 +34,7 @@ class AnalyticsService:
         redis_client = resources.redis_client
 
         if redis_client is None:
-            raise RuntimeError("Redis client is not initialized.")
+            raise ServiceUnavailableError("Redis client is not initialized.")
 
         metrics = redis_client.hgetall(self.analytics_key)
 

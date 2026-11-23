@@ -12,6 +12,7 @@ class CacheEntry(BaseModel):
 
 class CacheEntriesResponse(BaseModel):
     entries: list[CacheEntry]
+    total_entries: int
     returned_entries: int
     offset: int
     limit: int

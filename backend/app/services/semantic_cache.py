@@ -1,5 +1,6 @@
 from redisvl.extensions.cache.llm import SemanticCache
 
+from backend.app.core.exceptions import ServiceUnavailableError
 from backend.app.dependencies.resources import resources
 from backend.app.services.vectorizer import SharedEmbeddingVectorizer
 
@@ -29,7 +30,7 @@ class SemanticCacheService:
 
     def store(self, question: str, answer: str) -> str:
         if self.cache is None:
-            raise RuntimeError("Semantic cache is not initialized.")
+            raise ServiceUnavailableError("Semantic cache is not initialized.")
 
         embedding = resources.embedding_model.encode(question).tolist()
 
@@ -43,7 +44,7 @@ class SemanticCacheService:
 
     def search(self, question: str) -> list:
         if self.cache is None:
-            raise RuntimeError("Semantic cache is not initialized.")
+            raise ServiceUnavailableError("Semantic cache is not initialized.")
 
         embedding = resources.embedding_model.encode(question).tolist()
 
@@ -57,7 +58,7 @@ class SemanticCacheService:
     
     def get_entries(self, offset: int = 0, limit: int = 20) -> dict:
         if self.cache is None:
-            raise RuntimeError("Semantic cache is not initialized.")
+            raise ServiceUnavailableError("Semantic cache is not initialized.")
 
         from redisvl.query import FilterQuery
 
@@ -72,6 +73,8 @@ class SemanticCacheService:
 
         results = self.cache._index.query(query)
 
+        total_entries = self.cache._index.info()["num_docs"]
+
         entries = [
             {
                 "id": result["id"],
@@ -85,9 +88,8 @@ class SemanticCacheService:
 
         return {
             "entries": entries,
+            "total_entries": total_entries,
             "returned_entries": len(entries),
             "offset": offset,
             "limit": limit,
         }
-
-

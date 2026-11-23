@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
+from redis.exceptions import RedisError
 
 from backend.app.api.routes.chat import chat_service
 from backend.app.main import app
@@ -27,6 +28,12 @@ def test_chat_endpoint(monkeypatch):
 
     monkeypatch.setattr(
         "backend.app.main.resources.close",
+        lambda: None,
+    )
+
+    monkeypatch.setattr(
+        chat_service,
+        "initialize",
         lambda: None,
     )
 
@@ -60,6 +67,12 @@ def test_chat_cache_hit(monkeypatch):
 
     monkeypatch.setattr(
         "backend.app.main.resources.close",
+        lambda: None,
+    )
+
+    monkeypatch.setattr(
+        chat_service,
+        "initialize",
         lambda: None,
     )
 
@@ -100,6 +113,12 @@ def test_chat_cache_miss(monkeypatch):
         lambda: None,
     )
 
+    monkeypatch.setattr(
+        chat_service,
+        "initialize",
+        lambda: None,
+    )
+
     with TestClient(app) as client:
         response = client.post(
             "/chat",
@@ -125,6 +144,12 @@ def test_chat_empty_question(monkeypatch):
         lambda: None,
     )
 
+    monkeypatch.setattr(
+        chat_service,
+        "initialize",
+        lambda: None,
+    )
+
     with TestClient(app) as client:
         response = client.post(
             "/chat",
@@ -132,3 +157,36 @@ def test_chat_empty_question(monkeypatch):
         )
 
     assert response.status_code == 422
+
+def test_chat_when_redis_fails(monkeypatch):
+    mock_ask = MagicMock(
+        side_effect=RedisError("Redis connection failed")
+    )
+
+    monkeypatch.setattr(chat_service, "ask", mock_ask)
+    monkeypatch.setattr(
+        "backend.app.main.resources.initialize",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "backend.app.main.resources.close",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        chat_service,
+        "initialize",
+        lambda: None,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/chat",
+            json={"question": "What is semantic caching?"},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "A required service is currently unavailable."
+    }
+
+    mock_ask.assert_called_once_with("What is semantic caching?")
