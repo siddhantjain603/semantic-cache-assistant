@@ -1,4 +1,3 @@
-
 # Semantic Cache Assistant
 
 A customer-support AI assistant that uses semantic caching to reduce redundant LLM API calls, improve response latency, and optimize inference costs.
@@ -16,7 +15,8 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 3. Return the cached response if a sufficiently similar match is found.
 4. If no suitable match exists, invoke the Groq LLM.
 5. Store the newly generated response in the semantic cache.
-6. Return the response to the user.
+6. Record request metrics, including cache hits, cache misses, LLM calls, and latency.
+7. Return the response to the user.
 
 ## Tech Stack
 
@@ -27,6 +27,7 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 | Cache | Redis Stack, RedisVL |
 | Embeddings | Sentence Transformers |
 | Embedding Model | all-MiniLM-L6-v2 |
+| Embedding Dimensions | 384 |
 | LLM Provider | Groq |
 | LLM Model | openai/gpt-oss-120b |
 | Environment Management | uv |
@@ -38,36 +39,58 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 ## Architecture
 
 ```text
-                    User
-                      |
-                      v
-              Streamlit Frontend
-                      |
-                      v
-                FastAPI Backend
-                      |
-                      v
-              Generate Embedding
-                      |
-                      v
-             Redis Semantic Cache
-                      |
-                +-----+-----+
-                |           |
-             Cache Hit   Cache Miss
-                |           |
-                v           v
-          Cached Answer  Groq LLM
-                |           |
-                |      Generate Answer
-                |           |
-                |      Store in Redis
-                |           |
-                +-----+-----+
-                      |
-                      v
-                 User Response
+                         User
+                           |
+                           v
+                  Streamlit Frontend
+                           |
+                           v
+                     FastAPI Backend
+                           |
+                           v
+                  Generate Embedding
+                           |
+                           v
+                 Redis Semantic Cache
+                           |
+                    +------+------+
+                    |             |
+                 Cache Hit     Cache Miss
+                    |             |
+                    v             v
+              Cached Answer    Groq LLM
+                                  |
+                             Generate Answer
+                                  |
+                             Store in Redis
+                    |             |
+                    +------+------+
+                           |
+                           v
+                    Record Analytics
+                           |
+                           v
+                      User Response
 ```
+
+### Request Lifecycle
+
+**Cache Hit**
+
+- Convert the incoming query into an embedding.
+- Search Redis for a sufficiently similar cached query.
+- Return the previously generated response.
+- Avoid making a new LLM request.
+- Record a cache hit in analytics.
+
+**Cache Miss**
+
+- Convert the incoming query into an embedding.
+- Search Redis and find no sufficiently similar cached query.
+- Forward the request to the Groq LLM.
+- Store the generated response in Redis.
+- Record a cache miss and an LLM call.
+- Return the generated response.
 
 ## Project Structure
 
@@ -79,42 +102,44 @@ semantic-cache-assistant/
 │   │   ├── api/
 │   │   │   └── routes/
 │   │   │       ├── health.py
-│   │   │       └── chat.py
-│   │   │
+│   │   │       ├── chat.py
+│   │   │       ├── cache.py
+│   │   │       └── analytics.py
 │   │   ├── core/
-│   │   │   └── config.py
-│   │   │
+│   │   │   ├── config.py
+│   │   │   └── exceptions.py
 │   │   ├── dependencies/
 │   │   │   └── resources.py
-│   │   │
 │   │   ├── schemas/
 │   │   │   ├── health.py
-│   │   │   └── chat.py
-│   │   │
+│   │   │   ├── chat.py
+│   │   │   ├── cache.py
+│   │   │   └── analytics.py
 │   │   ├── services/
 │   │   │   ├── semantic_cache.py
 │   │   │   ├── vectorizer.py
 │   │   │   ├── llm.py
-│   │   │   └── chat.py
-│   │   │
+│   │   │   ├── chat.py
+│   │   │   └── analytics.py
 │   │   └── main.py
-│   │
 │   └── tests/
 │       ├── test_health.py
-│       └── test_chat.py
+│       ├── test_chat.py
+│       ├── test_cache.py
+│       ├── test_analytics.py
+│       └── test_analytics_api.py
 │
 ├── frontend/
 ├── data/
 ├── scripts/
 ├── results/
-│
 ├── .env.example
 ├── .gitignore
 ├── .python-version
+├── README.md
 ├── docker-compose.yml
 ├── pyproject.toml
-├── uv.lock
-└── README.md
+└── uv.lock
 ```
 
 ## Getting Started
@@ -147,11 +172,25 @@ Create your local environment file:
 cp .env.example .env
 ```
 
-Add your Groq API key to `.env`:
+Add your Groq API key:
 
 ```env
 GROQ_API_KEY=your_groq_api_key
 ```
+
+| Variable | Default / Purpose |
+|---|---|
+| `APP_NAME` | Semantic Cache Assistant |
+| `APP_VERSION` | 0.1.0 |
+| `DEBUG` | True |
+| `REDIS_URL` | redis://localhost:6379 |
+| `GROQ_API_KEY` | Your Groq API key |
+| `GROQ_MODEL` | openai/gpt-oss-120b |
+| `EMBEDDING_MODEL` | sentence-transformers/all-MiniLM-L6-v2 |
+| `EMBEDDING_DIMENSION` | 384 |
+| `CACHE_NAME` | semantic-cache-assistant |
+| `CACHE_DISTANCE_THRESHOLD` | 0.30 |
+| `CACHE_TTL` | 86400 seconds |
 
 Never commit your actual `.env` file or API keys to GitHub.
 
@@ -161,7 +200,13 @@ Never commit your actual `.env` file or API keys to GitHub.
 docker compose up -d
 ```
 
-Verify Redis:
+Verify the Redis container:
+
+```bash
+docker ps
+```
+
+Verify Redis connectivity:
 
 ```bash
 docker exec -it semantic-cache-redis redis-cli ping
@@ -179,18 +224,14 @@ PONG
 uv run uvicorn backend.app.main:app --reload
 ```
 
-The backend runs at:
+Backend URL: `http://127.0.0.1:8000`
 
-`http://127.0.0.1:8000`
-
-Swagger API documentation:
-
-`http://127.0.0.1:8000/docs`
+Swagger API documentation: `http://127.0.0.1:8000/docs`
 
 ### 6. Run Tests
 
 ```bash
-uv run python -m pytest -v
+uv run python -m pytest backend/tests/ -v
 ```
 
 Run code-quality checks:
@@ -203,15 +244,161 @@ uv run ruff check .
 
 | Method | Endpoint | Description | Status |
 |---|---|---|---|
-| GET | `/health` | Application and dependency health check | Implemented |
+| GET | `/health` | Application health check | Implemented |
 | POST | `/chat` | Submit a question and retrieve a cached or generated answer | Implemented |
-| GET | `/cache/stats` | Retrieve cache statistics | Planned |
-| GET | `/cache/entries` | Inspect cached entries | Planned |
-| DELETE | `/cache` | Clear cached responses | Planned |
+| GET | `/cache` | Retrieve cached entries with pagination | Implemented |
+| GET | `/analytics` | Retrieve cache and request analytics | Implemented |
+
+### 1. Health Check
+
+```http
+GET /health
+```
+
+Checks application health.
+
+### 2. Chat API
+
+```http
+POST /chat
+```
+
+Request:
+
+```json
+{
+    "question": "What is semantic caching?"
+}
+```
+
+Example response:
+
+```json
+{
+    "answer": "Semantic caching stores and retrieves responses using semantic similarity.",
+    "cache_hit": false,
+    "matched_question": null,
+    "distance": null
+}
+```
+
+| Field | Description |
+|---|---|
+| `answer` | Generated or cached answer |
+| `cache_hit` | Whether the response came from the cache |
+| `matched_question` | Original cached question when a match exists |
+| `distance` | Semantic distance of the matched cache entry |
+
+### 3. Cache Management API
+
+```http
+GET /cache
+```
+
+Retrieves cached entries from Redis with pagination.
+
+| Parameter | Default | Constraints |
+|---|---:|---|
+| `offset` | 0 | Greater than or equal to 0 |
+| `limit` | 20 | Between 1 and 100 |
+
+Example:
+
+```http
+GET /cache?offset=0&limit=20
+```
+
+Example response:
+
+```json
+{
+    "entries": [
+        {
+            "id": "cache:example",
+            "question": "What is semantic caching?",
+            "answer": "Semantic caching stores responses for similar queries.",
+            "inserted_at": 1795341127.36,
+            "updated_at": 1795341127.36
+        }
+    ],
+    "total_entries": 1,
+    "returned_entries": 1,
+    "offset": 0,
+    "limit": 20
+}
+```
+
+| Field | Description |
+|---|---|
+| `entries` | Retrieved cache records |
+| `total_entries` | Total number of indexed cache records |
+| `returned_entries` | Number of records in the current response |
+| `offset` | Current pagination offset |
+| `limit` | Maximum records requested |
+
+### 4. Analytics API
+
+```http
+GET /analytics
+```
+
+Returns application-level request and cache analytics.
+
+Example response:
+
+```json
+{
+    "total_requests": 10,
+    "cache_hits": 7,
+    "cache_misses": 3,
+    "llm_calls": 3,
+    "hit_rate": 70.0,
+    "miss_rate": 30.0,
+    "total_latency_ms": 2500.0,
+    "average_latency_ms": 250.0
+}
+```
+
+| Field | Description |
+|---|---|
+| `total_requests` | Total requests processed |
+| `cache_hits` | Requests served from cache |
+| `cache_misses` | Requests requiring LLM fallback |
+| `llm_calls` | Number of LLM calls |
+| `hit_rate` | Percentage of cache hits |
+| `miss_rate` | Percentage of cache misses |
+| `total_latency_ms` | Accumulated request latency |
+| `average_latency_ms` | Average request latency |
+
+Analytics are stored separately in Redis using a dedicated analytics key, so clearing the semantic cache through its cache-management mechanisms does not automatically erase analytics data.
+
+## Error Handling
+
+The application uses centralized exception handling in FastAPI.
+
+The following service errors are translated into HTTP 503 responses:
+
+| Exception | Source |
+|---|---|
+| `ServiceUnavailableError` | Application services |
+| `RedisError` | Redis client |
+| `RedisSearchError` | RedisVL search operations |
+
+Example error response:
+
+```json
+{
+    "detail": "A required service is currently unavailable."
+}
+```
+
+The application also validates pagination parameters and returns HTTP 422 for invalid values.
 
 ## Current Implementation Status
 
-### Completed — Milestone 1: Backend Foundation
+### Milestone 1 — Backend Foundation
+
+**Status: COMPLETED**
 
 - [x] Initialize project structure.
 - [x] Configure Python environment using uv.
@@ -233,52 +420,53 @@ uv run ruff check .
 - [x] Verify exact-match cache hits.
 - [x] Verify semantic cache hits using paraphrased queries.
 - [x] Verify cache misses and LLM fallback through the live API.
-- [x] Push completed milestone to GitHub.
-
-**Current baseline:** 5 automated tests passing; Ruff checks passing.
-
-Latest milestone commit:
-
-`192055f` — `feat: add chat API with semantic cache and Groq integration`
-
-## Development Roadmap
-
-This is the project's master execution plan. All milestones should be completed in sequence unless a documented engineering dependency requires a change.
-
-### Milestone 1 — Backend Foundation
-
-**Status: COMPLETED**
-
-Implemented the backend, Redis semantic cache, Groq integration, chat endpoint, health endpoint, and initial automated tests.
 
 ### Milestone 2 — Cache Management and Analytics
 
-**Status: NEXT**
+**Status: COMPLETED**
 
-- [ ] Inspect RedisVL cache management and inspection APIs.
-- [ ] Design application-level cache statistics.
-- [ ] Track total requests.
-- [ ] Track cache hits and cache misses.
-- [ ] Calculate cache hit rate and miss rate.
-- [ ] Track LLM API calls and calls avoided.
-- [ ] Measure request and cache lookup latency.
-- [ ] Implement cache statistics endpoint.
-- [ ] Implement cached-entry inspection endpoint.
-- [ ] Implement clear-cache endpoint.
-- [ ] Handle cache expiration and TTL configuration.
-- [ ] Add automated tests for cache management APIs.
+- [x] Inspect RedisVL cache management and inspection APIs.
+- [x] Design application-level cache statistics.
+- [x] Track total requests.
+- [x] Track cache hits and cache misses.
+- [x] Calculate cache hit rate and miss rate.
+- [x] Track LLM API calls.
+- [x] Measure request latency.
+- [x] Implement analytics service.
+- [x] Implement GET `/analytics`.
+- [x] Implement cached-entry inspection.
+- [x] Implement pagination for cache entries.
+- [x] Include total cache-entry count.
+- [x] Implement GET `/cache`.
+- [x] Handle uninitialized cache and service states.
+- [x] Implement centralized Redis and RedisVL exception handling.
+- [x] Add automated tests for cache and analytics APIs.
+- [x] Verify HTTP 503 behavior for Redis failures.
+- [x] Run complete backend test suite.
+- [x] Run full-project Ruff checks.
+
+**Milestone 2 verification:**
+
+- 20 automated backend tests passing.
+- Full-project Ruff checks passing.
+- Redis and RedisVL error handling verified through API tests.
+- Cache inspection and pagination verified.
+
+## Development Roadmap
+
+This is the project's master execution plan. Milestones should be completed in sequence unless a documented engineering dependency requires a change.
 
 ### Milestone 3 — Testing and Reliability
 
-**Status: PLANNED**
+**Status: NEXT**
 
-- [ ] Add unit tests for ChatService.
+- [ ] Add deeper unit tests for ChatService.
 - [ ] Test semantic cache hit behavior.
 - [ ] Test semantic cache miss behavior.
 - [ ] Test LLM fallback and response storage.
 - [ ] Test lazy LLM initialization.
 - [ ] Test Groq API failures and timeouts.
-- [ ] Test Redis connection failures.
+- [ ] Test Redis connection failures against a real Redis instance.
 - [ ] Test invalid requests and edge cases.
 - [ ] Add integration tests for Redis and the complete request pipeline.
 - [ ] Evaluate concurrent requests and race conditions.
@@ -348,8 +536,18 @@ Implemented the backend, Redis semantic cache, Groq integration, chat endpoint, 
 - [ ] Add frontend screenshots.
 - [ ] Add a project demonstration.
 - [ ] Perform final end-to-end verification.
-- [ ] Update README with final implementation details.
 - [ ] Publish a tagged GitHub release.
+
+## Future Enhancements
+
+Features not included in the current implementation but worth considering:
+
+- Cache clearing endpoint.
+- Cache expiration and TTL management controls.
+- More detailed cache lookup latency tracking.
+- LLM calls avoided and estimated cost savings.
+- Configurable semantic distance threshold through the frontend.
+- Detailed operational monitoring.
 
 ## Evaluation Metrics
 
