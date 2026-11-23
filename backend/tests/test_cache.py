@@ -1,3 +1,4 @@
+
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ from backend.app.api.routes.chat import chat_service
 from backend.app.main import app
 
 
+# Verifies that GET /cache returns cache entries with the correct response metadata.
 def test_get_cache_entries(monkeypatch):
     mock_entries = {
         "entries": [
@@ -61,6 +63,8 @@ def test_get_cache_entries(monkeypatch):
         limit=20,
     )
 
+
+# Verifies that GET /cache accepts pagination parameters and passes them to the service.
 def test_get_cache_entries_with_pagination(monkeypatch):
     mock_service = MagicMock()
     mock_service.get_entries.return_value = {
@@ -102,6 +106,8 @@ def test_get_cache_entries_with_pagination(monkeypatch):
         limit=5,
     )
 
+
+# Verifies that invalid pagination values are rejected with HTTP 422.
 def test_get_cache_entries_invalid_pagination(monkeypatch):
     monkeypatch.setattr(
         "backend.app.main.resources.initialize",
@@ -130,6 +136,8 @@ def test_get_cache_entries_invalid_pagination(monkeypatch):
                 f"Expected 422 for {url}, got {response.status_code}"
             )
 
+
+# Verifies that GET /cache returns HTTP 503 when Redis raises a connection error.
 def test_get_cache_entries_when_redis_fails(monkeypatch):
     mock_service = MagicMock()
     mock_service.get_entries.side_effect = RedisError(
@@ -165,11 +173,13 @@ def test_get_cache_entries_when_redis_fails(monkeypatch):
         "detail": "A required service is currently unavailable."
     }
 
+
+# Verifies that GET /cache returns HTTP 503 when Redis Search raises an error.
 def test_get_cache_entries_when_redis_search_fails(monkeypatch):
     mock_service = MagicMock()
     mock_service.get_entries.side_effect = RedisSearchError(
-    "Redis search failed"
-)
+        "Redis search failed"
+    )
 
     monkeypatch.setattr(
         "backend.app.main.resources.initialize",

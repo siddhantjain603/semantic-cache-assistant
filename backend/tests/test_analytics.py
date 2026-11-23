@@ -8,6 +8,7 @@ from backend.app.dependencies.resources import resources
 from backend.app.services.analytics import AnalyticsService
 
 
+# Verifies that a cache hit increments total requests and cache hits, and records request latency.
 def test_record_cache_hit(monkeypatch):
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()
@@ -39,6 +40,8 @@ def test_record_cache_hit(monkeypatch):
 
     mock_pipeline.execute.assert_called_once()
 
+
+# Verifies that a cache miss increments total requests, cache misses, and LLM calls.
 def test_record_cache_miss(monkeypatch):
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()
@@ -72,6 +75,8 @@ def test_record_cache_miss(monkeypatch):
     )
     mock_pipeline.execute.assert_called_once()
 
+
+# Verifies that analytics metrics, hit rate, miss rate, and average latency are calculated correctly.
 def test_get_analytics(monkeypatch):
     mock_redis = MagicMock()
     mock_redis.hgetall.return_value = {
@@ -100,6 +105,8 @@ def test_get_analytics(monkeypatch):
 
     mock_redis.hgetall.assert_called_once_with(service.analytics_key)
 
+
+# Verifies that analytics returns zero-valued metrics when Redis contains no analytics data.
 def test_get_analytics_empty(monkeypatch):
     mock_redis = MagicMock()
     mock_redis.hgetall.return_value = {}
@@ -120,6 +127,8 @@ def test_get_analytics_empty(monkeypatch):
         "average_latency_ms": 0,
     }
 
+
+# Verifies that recording analytics raises ServiceUnavailableError when Redis is not initialized.
 def test_record_request_without_redis(monkeypatch):
     monkeypatch.setattr(resources, "redis_client", None)
 
@@ -131,6 +140,8 @@ def test_record_request_without_redis(monkeypatch):
     ):
         service.record_request(cache_hit=True, latency_ms=100.0)
 
+
+# Verifies that retrieving analytics raises ServiceUnavailableError when Redis is not initialized.
 def test_get_analytics_without_redis(monkeypatch):
     monkeypatch.setattr(resources, "redis_client", None)
 

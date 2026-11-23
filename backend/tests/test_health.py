@@ -7,6 +7,7 @@ from backend.app.dependencies.resources import resources
 from backend.app.main import app
 
 
+# Verifies that GET /health reports the application, Redis, and embedding model as healthy.
 def test_health_endpoint(monkeypatch):
     mock_redis = MagicMock()
     mock_redis.ping.return_value = True

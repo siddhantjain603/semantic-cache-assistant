@@ -1,3 +1,4 @@
+
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from backend.app.api.routes.chat import chat_service
 from backend.app.main import app
 
 
+# Verifies that GET /analytics returns the analytics metrics successfully.
 def test_get_analytics_endpoint(monkeypatch):
     mock_analytics = {
         "total_requests": 10,
@@ -52,6 +54,8 @@ def test_get_analytics_endpoint(monkeypatch):
 
     mock_service.get_analytics.assert_called_once()
 
+
+# Verifies that GET /analytics returns zero-valued metrics when no analytics data exists.
 def test_get_analytics_empty(monkeypatch):
     mock_analytics = {
         "total_requests": 0,
@@ -94,6 +98,8 @@ def test_get_analytics_empty(monkeypatch):
     assert response.status_code == 200
     assert response.json() == mock_analytics
 
+
+# Verifies that GET /analytics returns HTTP 503 when Redis raises a connection error.
 def test_get_analytics_when_redis_fails(monkeypatch):
     mock_service = MagicMock()
     mock_service.get_analytics.side_effect = RedisError(
