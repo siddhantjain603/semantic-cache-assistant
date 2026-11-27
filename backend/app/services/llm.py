@@ -15,7 +15,9 @@ class LLMService:
             from groq import Groq
 
             self.client = Groq(
-                api_key=self.settings.GROQ_API_KEY
+                api_key=self.settings.GROQ_API_KEY,
+                timeout=self.settings.GROQ_TIMEOUT,
+                max_retries=self.settings.GROQ_MAX_RETRIES,
             )
 
             print("Groq LLM initialized.")
