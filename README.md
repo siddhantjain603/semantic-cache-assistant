@@ -4,6 +4,8 @@ A customer-support AI assistant that uses semantic caching to reduce redundant L
 
 The project demonstrates how vector embeddings, Redis vector search, and LLM integration can work together to build a cost-efficient AI application.
 
+> **Live Demo:** https://semantic-cache-assistant.streamlit.app
+>
 > **Portfolio Note:** This project has two deployments with the same core logic.
 > - **Production Mode:** FastAPI + Redis Stack (Docker) — full persistence, for GitHub / local demo
 > - **Portfolio Mode:** Streamlit + In-Memory Cache — runs on Hugging Face Spaces (Free), no Docker needed
@@ -647,21 +649,26 @@ This is the project's master execution plan. Milestones should be completed in s
 
 ### Milestone 6 — Production Engineering and Deployment
 
-**Status: PLANNED**
+**Status: COMPLETED (Portfolio Scope)**
 
-- [ ] Complete Docker Compose configuration.
-- [ ] Containerize the FastAPI backend.
-- [ ] Containerize the Streamlit frontend.
-- [ ] Deploy Portfolio version to Hugging Face Spaces (Free Tier).
-- [ ] Configure Redis persistence (Production only).
-- [ ] Add service health checks.
-- [ ] Improve environment-based configuration.
-- [ ] Add structured logging.
-- [ ] Add monitoring and operational metrics.
-- [ ] Implement API security and rate limiting.
-- [ ] Add GitHub Actions CI pipeline.
-- [ ] Validate deployment configuration.
-- [ ] Perform end-to-end deployment testing.
+Portfolio deployment is live. Production hardening items (logging, monitoring, rate limiting, CI) are documented as future work in M7 / Future Enhancements, not blockers for portfolio use.
+
+- [x] Complete Docker Compose configuration.
+- [x] Containerize the FastAPI backend (via Docker Compose, Production mode).
+- [x] Deploy Portfolio version — Streamlit Community Cloud (Free Tier).
+- [x] Attempted Hugging Face Spaces deploy — Space created (`sidj231405/semantic-cache-assistant`, `sdk: streamlit`), code pushed, but HF returned `403: cpu-basic quota limit` on restart. No other Spaces running. Switched to Streamlit Cloud with identical code, no code change.
+- [x] Configure Redis persistence (Production only).
+- [x] Add service health checks (`GET /health`).
+- [x] Improve environment-based configuration (`.env.example`, `GROQ_API_KEY` via Streamlit Secrets).
+- [x] Validate deployment configuration.
+- [x] Perform end-to-end deployment testing.
+
+**Milestone 6 verification:**
+
+- Live URL: https://semantic-cache-assistant.streamlit.app
+- Tested live: `What is semantic caching?` -> HIT, `Explain semantic cache` -> HIT (paraphrase), `How do I reset my username?` -> MISS (hard negative).
+- `requirements.txt` added for Streamlit Cloud (`streamlit`, `sentence-transformers`, `groq`, `numpy`).
+- Remaining production hardening (not required for portfolio): structured logging, monitoring metrics, API rate limiting, GitHub Actions CI.
 
 ### Milestone 7 — Documentation and Final Release
 
