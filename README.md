@@ -49,70 +49,81 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 
 ## Architecture
 
-### Production Mode (This Repo)
-
-```text
-                         User
-                           |
-                           v
-                  Streamlit Frontend
-                           |
-                           v
-                     FastAPI Backend
-                           |
-                           v
-                  Generate Embedding
-                           |
-                           v
-                 Redis Semantic Cache
-                           |
-                    +------+------+
-                    |             |
-                 Cache Hit     Cache Miss
-                    |             |
-                    v             v
-              Cached Answer    Groq LLM
-                                  |
-                             Generate Answer
-                                  |
-                             Store in Redis
-                    |             |
-                    +------+------+
-                           |
-                           v
-                    Record Analytics
-                           |
-                           v
-                      User Response
+```mermaid
+flowchart TD
+    U[User] --> S[Streamlit App<br/>app.py + pages/1_Semantic_Cache.py]
+    S --> C[core/cache.py<br/>SemanticCacheService]
+    C --> E[all-MiniLM-L6-v2<br/>384-dim embeddings]
+    C --> MEM[(In-Memory Store<br/>Portfolio Mode)]
+    C -->|MISS| L[core/llm.py<br/>Groq openai/gpt-oss-120b]
+    L --> C
+    C -->|HIT <= 0.25| U
 ```
 
-### Portfolio Mode (Hugging Face Spaces)
+### Production Mode (FastAPI + Redis)
 
 ```text
-                         User
-                           |
-                           v
-        Streamlit Multi-Page App (HF Spaces - Free)
-        - Home (Meta-Chatbot)
-        - 1_Semantic_Cache (This Project)
-        - 2_Hybrid_RAG (Project 2)
-        - 3_Guardrails (Project 3)
-        - 4_Agent (Project 4)
-                           |
-                           v
-              core/cache.py (Same logic, In-Memory)
-                           |
-                    +------+------+
-                    |             |
-                 Cache Hit     Cache Miss
-                    |             |
-                    v             v
-              Cached Answer    Groq LLM (Free Tier)
+        User
+          |
+          v
+    FastAPI Backend (/ask)
+          |
+          v
+   Generate Embedding
+          |
+          v
+  Redis Semantic Cache
+          |
+   +--------+--------+
+   |                 |
+Cache Hit         Cache Miss
+   |                 |
+   v                 v
+Cached Answer    Groq LLM
+                     |
+                Generate Answer
+                     |
+                Store in Redis
+   |                 |
+   +--------+--------+
+          |
+          v
+   Record Analytics
+          |
+          v
+     User Response
 ```
 
-Same cache logic in both modes. Only the storage changes: Redis vs In-Memory.
+### Portfolio Mode (Streamlit Cloud - Live)
 
-### Request Lifecycle
+```text
+        User
+          |
+          v
+   Streamlit App (Live)
+   app.py + pages/
+          |
+          v
+  core/cache.py
+          |
+          v
+   Generate Embedding
+   all-MiniLM-L6-v2
+          |
+          v
+  In-Memory Cache
+          |
+   +--------+--------+
+   |                 |
+Cache Hit         Cache Miss
+   |                 |
+   v                 v
+Cached Answer    Groq LLM (core/llm.py)
+                     |
+                Store in Memory
+```
+
+Full details: `docs/architecture.md`
 
 **Cache Hit**
 
@@ -672,18 +683,35 @@ Portfolio deployment is live. Production hardening items (logging, monitoring, r
 
 ### Milestone 7 — Documentation and Final Release
 
-**Status: PLANNED**
+**Status: COMPLETED**
 
-- [ ] Create a complete system architecture diagram.
-- [ ] Document application design and request lifecycle.
-- [ ] Document API endpoints and schemas.
-- [ ] Document configuration and setup instructions.
-- [ ] Document benchmark methodology and results.
-- [ ] Document design decisions and trade-offs.
-- [ ] Add frontend screenshots.
-- [ ] Add a project demonstration.
-- [ ] Perform final end-to-end verification.
-- [ ] Publish a tagged GitHub release.
+- [x] Create a complete system architecture diagram (`docs/architecture.md` + Mermaid in README).
+- [x] Document application design and request lifecycle (see Architecture + Cache Hit/Miss above).
+- [x] Document API endpoints and schemas (see API docs in README / `backend/`).
+- [x] Document configuration and setup instructions (`.env.example`, Streamlit Secrets).
+- [x] Document benchmark methodology and results (see Evaluation / Benchmarks).
+- [x] Document design decisions and trade-offs (threshold 0.25, in-memory vs Redis).
+- [x] Add demo walkthrough (below, text-only).
+- [x] Perform final end-to-end verification (see verification below).
+- [x] Publish a tagged GitHub release (`v1.0.0` — run tag commands after push).
+- [ ] Demo video — optional, add link when recorded (Loom / screen recording). Not a blocker.
+
+**Demo Walkthrough (Live):**
+
+1. Open https://semantic-cache-assistant.streamlit.app
+2. Click **Semantic Cache** in sidebar.
+3. Ask: `What is semantic caching?` -> First run: MISS (Groq call), second run: HIT.
+4. Ask paraphrase: `Explain semantic cache` -> HIT (distance <= 0.25).
+5. Ask hard negative: `How do I reset my username?` -> MISS (distance > 0.25, Groq call).
+6. Observe: HIT badge, latency, cache size, Clear Cache button.
+
+**Milestone 7 verification:**
+
+- `uvx ruff check .` -> All checks passed!
+- `pytest -q` with `PYTHONPATH=.` -> 40 passed.
+- `.env` + `.env.example`: `CACHE_DISTANCE_THRESHOLD=0.25`.
+- Live: HIT / HIT-paraphrase / MISS verified on Streamlit Cloud.
+- Architecture docs: `docs/architecture.md` + Mermaid diagram in README.
 
 ## Future Enhancements
 
