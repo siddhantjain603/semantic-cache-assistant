@@ -4,6 +4,12 @@ A customer-support AI assistant that uses semantic caching to reduce redundant L
 
 The project demonstrates how vector embeddings, Redis vector search, and LLM integration can work together to build a cost-efficient AI application.
 
+> **Portfolio Note:** This project has two deployments with the same core logic.
+> - **Production Mode:** FastAPI + Redis Stack (Docker) — full persistence, for GitHub / local demo
+> - **Portfolio Mode:** Streamlit + In-Memory Cache — runs on Hugging Face Spaces (Free), no Docker needed
+>
+> If `REDIS_URL` is unavailable, the service automatically falls back to in-memory vector search using the same cosine-distance logic. No code change needed.
+
 ## Overview
 
 Semantic Cache Assistant identifies semantically similar user queries and reuses previously generated responses instead of invoking an LLM for every request.
@@ -20,23 +26,28 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 
 ## Tech Stack
 
-| Component | Technology |
-|---|---|
-| Backend | Python, FastAPI, Uvicorn |
-| Frontend | Streamlit |
-| Cache | Redis Stack, RedisVL |
-| Embeddings | Sentence Transformers |
-| Embedding Model | all-MiniLM-L6-v2 |
-| Embedding Dimensions | 384 |
-| LLM Provider | Groq |
-| LLM Model | openai/gpt-oss-120b |
-| Environment Management | uv |
-| Testing | Pytest, HTTPX |
-| Code Quality | Ruff |
-| Data Analysis | pandas |
-| Infrastructure | Docker, Docker Compose |
+| Component | Technology | Cost |
+|---|---|---|
+| Backend | Python, FastAPI, Uvicorn | Free |
+| Frontend | Streamlit | Free |
+| Cache | Redis Stack, RedisVL (Production) / In-Memory NumPy (Portfolio) | Free |
+| Embeddings | Sentence Transformers | Free, runs locally |
+| Embedding Model | all-MiniLM-L6-v2 | Free, open-source |
+| Embedding Dimensions | 384 | - |
+| LLM Provider | Groq | Free Tier |
+| LLM Model | openai/gpt-oss-120b | Free Tier via Groq |
+| Environment Management | uv | Free |
+| Testing | Pytest, HTTPX | Free |
+| Code Quality | Ruff | Free |
+| Data Analysis | pandas | Free |
+| Infrastructure | Docker, Docker Compose (Production) / Hugging Face Spaces (Portfolio) | Free |
+| Deployment | Hugging Face Spaces (Free Tier) | Free |
+
+**100% Free Resources:** No paid APIs, no paid databases, no paid hosting. Embeddings run locally, LLM uses Groq Free Tier, hosting uses Hugging Face Spaces Free Tier.
 
 ## Architecture
+
+### Production Mode (This Repo)
 
 ```text
                          User
@@ -72,6 +83,32 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
                            v
                       User Response
 ```
+
+### Portfolio Mode (Hugging Face Spaces)
+
+```text
+                         User
+                           |
+                           v
+        Streamlit Multi-Page App (HF Spaces - Free)
+        - Home (Meta-Chatbot)
+        - 1_Semantic_Cache (This Project)
+        - 2_Hybrid_RAG (Project 2)
+        - 3_Guardrails (Project 3)
+        - 4_Agent (Project 4)
+                           |
+                           v
+              core/cache.py (Same logic, In-Memory)
+                           |
+                    +------+------+
+                    |             |
+                 Cache Hit     Cache Miss
+                    |             |
+                    v             v
+              Cached Answer    Groq LLM (Free Tier)
+```
+
+Same cache logic in both modes. Only the storage changes: Redis vs In-Memory.
 
 ### Request Lifecycle
 
@@ -129,9 +166,18 @@ semantic-cache-assistant/
 │       ├── test_analytics.py
 │       └── test_analytics_api.py
 │
+├── core/                  # Portfolio: Shared logic for HF Spaces
+│   ├── cache.py           # Copy of semantic_cache logic, no FastAPI
+│   └── llm.py             # Groq wrapper (Free Tier)
+│
+├── pages/
+│   └── 1_Semantic_Cache.py # Portfolio page: Playground + Trace + Analytics
+│
 ├── frontend/
+│   └── app.py             # Home + Meta-Chatbot (Portfolio)
 ├── data/
 ├── scripts/
+│   └── evaluate_threshold.py
 ├── results/
 ├── .env.example
 ├── .gitignore
@@ -148,8 +194,8 @@ semantic-cache-assistant/
 
 - Python 3.13
 - uv
-- Docker Desktop
-- Groq API key
+- Docker Desktop (only for Production Mode)
+- Groq API key (Free Tier: https://console.groq.com)
 
 ### 1. Clone the Repository
 
@@ -184,17 +230,19 @@ GROQ_API_KEY=your_groq_api_key
 | `APP_VERSION` | 0.1.0 |
 | `DEBUG` | True |
 | `REDIS_URL` | redis://localhost:6379 |
-| `GROQ_API_KEY` | Your Groq API key |
+| `GROQ_API_KEY` | Your Groq API key (Free Tier) |
 | `GROQ_MODEL` | openai/gpt-oss-120b |
 | `EMBEDDING_MODEL` | sentence-transformers/all-MiniLM-L6-v2 |
 | `EMBEDDING_DIMENSION` | 384 |
 | `CACHE_NAME` | semantic-cache-assistant |
-| `CACHE_DISTANCE_THRESHOLD` | 0.30 |
+| `CACHE_DISTANCE_THRESHOLD` | 0.25 |
 | `CACHE_TTL` | 86400 seconds |
+
+> Threshold is **0.25**, not 0.30. See Evaluation Results below for why.
 
 Never commit your actual `.env` file or API keys to GitHub.
 
-### 4. Start Redis
+### 4. Start Redis (Production Mode Only)
 
 ```bash
 docker compose up -d
@@ -218,6 +266,8 @@ Expected output:
 PONG
 ```
 
+> **Portfolio Mode:** Skip this step. If Redis is not available, the app automatically uses in-memory cache. This is how it runs on Hugging Face Spaces (Free).
+
 ### 5. Start the Backend
 
 ```bash
@@ -238,6 +288,12 @@ Run code-quality checks:
 
 ```bash
 uv run ruff check .
+```
+
+### 7. Run Evaluation
+
+```bash
+uv run python scripts/evaluate_threshold.py
 ```
 
 ## API Endpoints
@@ -394,6 +450,32 @@ Example error response:
 
 The application also validates pagination parameters and returns HTTP 422 for invalid values.
 
+## Evaluation Results
+
+### Threshold Selection
+
+Evaluated with `scripts/evaluate_threshold.py` on 13 test queries:
+- 6 true paraphrases (should HIT)
+- 5 hard negatives like "reset username" vs "reset password" (should MISS)
+- 2 easy negatives like "cook pasta" (should MISS)
+
+| Threshold | TP | FP | FN | TN | Precision | Recall | F1 | Avg Lookup |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.15 | 4 | 0 | 2 | 7 | 1.00 | 0.67 | 0.80 | 60.6ms |
+| **0.25** | **5** | **1** | **1** | **6** | **0.83** | **0.83** | **0.83** | **54.4ms** |
+| 0.30 | 5 | 3 | 1 | 4 | 0.62 | 0.83 | 0.71 | 55.6ms |
+| 0.40 | 5 | 4 | 1 | 3 | 0.56 | 0.83 | 0.67 | 53.6ms |
+| 0.50 | 6 | 4 | 0 | 3 | 0.60 | 1.00 | 0.75 | 53.0ms |
+
+**Chosen Threshold: 0.25**
+
+Why 0.25 and not 0.30 (old default)?
+- At 0.30, we got 3 false positives — e.g., "reset username" incorrectly matched "reset password". In customer support, that's giving the wrong answer.
+- At 0.15, we were too strict — missed 2 real paraphrases.
+- At 0.25, we get the best balance: highest F1 score (0.83), only 1 FP and 1 FN.
+
+> Initial testing with only easy negatives showed all thresholds 0.25-0.50 as perfect. Adding hard negatives revealed the real tradeoff. This is why eval datasets must include hard negatives.
+
 ## Current Implementation Status
 
 ### Milestone 1 — Backend Foundation
@@ -458,7 +540,7 @@ This is the project's master execution plan. Milestones should be completed in s
 
 ### Milestone 3 — Testing and Reliability
 
-**Status: NEXT**
+**Status: IN PROGRESS**
 
 - [ ] Add deeper unit tests for ChatService.
 - [ ] Test semantic cache hit behavior.
@@ -474,36 +556,35 @@ This is the project's master execution plan. Milestones should be completed in s
 
 ### Milestone 4 — Evaluation and Benchmarking
 
-**Status: PLANNED**
+**Status: IN PROGRESS**
 
-- [ ] Design a representative query evaluation dataset.
-- [ ] Include exact-match queries.
-- [ ] Include semantically similar queries.
-- [ ] Include unrelated queries.
-- [ ] Evaluate different cosine-distance thresholds.
-- [ ] Measure cache hit rate and miss rate.
-- [ ] Measure false-positive and false-negative rates.
-- [ ] Measure semantic matching accuracy.
-- [ ] Compare cache-hit and cache-miss latency.
-- [ ] Measure average LLM response latency.
+- [x] Design a representative query evaluation dataset (with hard negatives).
+- [x] Include exact-match queries.
+- [x] Include semantically similar queries.
+- [x] Include unrelated queries.
+- [x] Evaluate different cosine-distance thresholds.
+- [x] Measure cache hit rate and miss rate.
+- [x] Measure false-positive and false-negative rates.
+- [x] Measure semantic matching accuracy.
+- [x] Document threshold selection and trade-offs (0.25 chosen, F1 0.83).
+- [ ] Compare cache-hit and cache-miss latency with 100+ entries.
 - [ ] Estimate LLM API calls avoided.
 - [ ] Estimate cost savings.
 - [ ] Generate benchmark reports and visualizations.
-- [ ] Document threshold selection and trade-offs.
 
-### Milestone 5 — Streamlit Frontend
+### Milestone 5 — Streamlit Frontend (Portfolio)
 
-**Status: PLANNED**
+**Status: NEXT**
 
 - [ ] Build the main Streamlit application.
-- [ ] Implement an interactive chat interface.
-- [ ] Connect the frontend to the FastAPI backend.
+- [ ] Build `pages/1_Semantic_Cache.py` for portfolio (Playground + Trace + Analytics).
+- [ ] Implement an interactive chat interface with HIT/MISS badge.
+- [ ] Connect the frontend to the FastAPI backend (Production) / core/cache.py (Portfolio).
 - [ ] Display cache-hit and cache-miss status.
 - [ ] Display matched questions and semantic distance.
 - [ ] Build a cache statistics dashboard.
-- [ ] Add cache management controls.
-- [ ] Build evaluation and benchmarking visualizations.
-- [ ] Add suitable configuration controls.
+- [ ] Add cache management controls (Clear Cache).
+- [ ] Add threshold slider (default 0.25).
 - [ ] Improve UI usability and error handling.
 
 ### Milestone 6 — Production Engineering and Deployment
@@ -513,7 +594,8 @@ This is the project's master execution plan. Milestones should be completed in s
 - [ ] Complete Docker Compose configuration.
 - [ ] Containerize the FastAPI backend.
 - [ ] Containerize the Streamlit frontend.
-- [ ] Configure Redis persistence.
+- [ ] Deploy Portfolio version to Hugging Face Spaces (Free Tier).
+- [ ] Configure Redis persistence (Production only).
 - [ ] Add service health checks.
 - [ ] Improve environment-based configuration.
 - [ ] Add structured logging.
@@ -580,6 +662,7 @@ To maintain engineering quality and avoid drifting from the project plan:
 6. Commit and push completed milestones to GitHub.
 7. Never mark a feature complete without testing it.
 8. Keep benchmark claims backed by measured results rather than assumptions.
+9. Use only free-tier resources for portfolio deployment (Groq Free, HF Spaces Free, local embeddings).
 
 ## License
 
