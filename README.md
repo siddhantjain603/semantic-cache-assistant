@@ -162,9 +162,11 @@ semantic-cache-assistant/
 │   └── tests/
 │       ├── test_health.py
 │       ├── test_chat.py
+│       ├── test_chat_service.py
 │       ├── test_cache.py
 │       ├── test_analytics.py
-│       └── test_analytics_api.py
+│       ├── test_analytics_api.py
+│       └── test_llm.py
 │
 ├── core/                  # Portfolio: Shared logic for HF Spaces
 │   ├── cache.py           # Copy of semantic_cache logic, no FastAPI
@@ -173,8 +175,7 @@ semantic-cache-assistant/
 ├── pages/
 │   └── 1_Semantic_Cache.py # Portfolio page: Playground + Trace + Analytics
 │
-├── frontend/
-│   └── app.py             # Home + Meta-Chatbot (Portfolio)
+├── app.py                 # Portfolio entry point (Streamlit Home)
 ├── data/
 ├── scripts/
 │   └── evaluate_threshold.py
@@ -540,19 +541,26 @@ This is the project's master execution plan. Milestones should be completed in s
 
 ### Milestone 3 — Testing and Reliability
 
-**Status: IN PROGRESS**
+**Status: COMPLETED**
 
-- [ ] Add deeper unit tests for ChatService.
-- [ ] Test semantic cache hit behavior.
-- [ ] Test semantic cache miss behavior.
-- [ ] Test LLM fallback and response storage.
-- [ ] Test lazy LLM initialization.
-- [ ] Test Groq API failures and timeouts.
-- [ ] Test Redis connection failures against a real Redis instance.
-- [ ] Test invalid requests and edge cases.
-- [ ] Add integration tests for Redis and the complete request pipeline.
-- [ ] Evaluate concurrent requests and race conditions.
-- [ ] Improve error handling and application reliability.
+- [x] Add deeper unit tests for ChatService.
+- [x] Test semantic cache hit behavior.
+- [x] Test semantic cache miss behavior.
+- [x] Test LLM fallback and response storage.
+- [x] Test lazy LLM initialization.
+- [x] Test Groq API failures and timeouts.
+- [x] Test Redis connection failures against a real Redis instance.
+- [x] Test invalid requests and edge cases.
+- [x] Add integration tests for Redis and the complete request pipeline.
+- [x] Evaluate concurrent requests and race conditions.
+- [x] Improve error handling and application reliability.
+
+**Milestone 3 verification:**
+
+- 40 automated backend tests passing (39 + 1 concurrent test `test_ask_handles_concurrent_requests`).
+- 12 tests in `test_chat_service.py` alone.
+- 8 tests in `test_llm.py` covering auth, timeout, rate-limit, 500, connection error.
+- Full-project Ruff checks passing (`ruff check --fix` applied for import sorting).
 
 ### Milestone 4 — Evaluation and Benchmarking
 
@@ -574,18 +582,27 @@ This is the project's master execution plan. Milestones should be completed in s
 
 ### Milestone 5 — Streamlit Frontend (Portfolio)
 
-**Status: NEXT**
+**Status: COMPLETED**
 
-- [ ] Build the main Streamlit application.
-- [ ] Build `pages/1_Semantic_Cache.py` for portfolio (Playground + Trace + Analytics).
-- [ ] Implement an interactive chat interface with HIT/MISS badge.
-- [ ] Connect the frontend to the FastAPI backend (Production) / core/cache.py (Portfolio).
-- [ ] Display cache-hit and cache-miss status.
-- [ ] Display matched questions and semantic distance.
-- [ ] Build a cache statistics dashboard.
-- [ ] Add cache management controls (Clear Cache).
-- [ ] Add threshold slider (default 0.25).
-- [ ] Improve UI usability and error handling.
+- [x] Build the main Streamlit application.
+- [x] Build `pages/1_Semantic_Cache.py` for portfolio (Playground + Trace + Analytics).
+- [x] Implement an interactive chat interface with HIT/MISS badge.
+- [x] Connect the frontend to the FastAPI backend (Production) / core/cache.py (Portfolio).
+- [x] Display cache-hit and cache-miss status.
+- [x] Display matched questions and semantic distance.
+- [x] Build a cache statistics dashboard.
+- [x] Add cache management controls (Clear Cache).
+- [x] Add threshold slider (default 0.25).
+- [x] Improve UI usability and error handling.
+
+**Milestone 5 verification:**
+
+- Tested locally on `http://127.0.0.1:8502`.
+- `What is semantic caching?` -> HIT, distance 0.0132, latency 422.2 ms.
+- `Explain semantic cache` -> HIT (paraphrase).
+- `How do I reset my username?` -> MISS (hard negative).
+- Loading progress bar + status (`Warming up... Step 1/3...`) added so first model load is not blank.
+- Font system: Inter (body) + Sora (headings) + JetBrains Mono (numbers/code).
 
 ### Milestone 6 — Production Engineering and Deployment
 

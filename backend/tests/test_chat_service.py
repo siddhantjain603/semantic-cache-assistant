@@ -1,4 +1,4 @@
-
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import pytest
@@ -346,3 +346,34 @@ def test_ask_falls_back_to_llm_when_redis_search_times_out():
     service.llm.generate_response.assert_called_once_with(question)
     service.semantic_cache.store.assert_called_once_with(question, answer)
     service.analytics.record_request.assert_called_once()
+
+# Verifies that 10 concurrent ask() calls all succeed, each gets its own answer,
+# and analytics is recorded once per request with no lost or mixed-up calls.
+def test_ask_handles_concurrent_requests():
+    service = ChatService()
+
+    service.semantic_cache = MagicMock()
+    service.llm = MagicMock()
+    service.analytics = MagicMock()
+
+    service.semantic_cache.search.return_value = []
+    service.llm.generate_response.side_effect = lambda q: f"Answer for {q}"
+
+    questions = [f"What is topic {i}?" for i in range(10)]
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(service.ask, questions))
+
+    assert len(results) == 10
+    for q, result in zip(questions, results):
+        assert result == {
+            "answer": f"Answer for {q}",
+            "cache_hit": False,
+            "matched_question": None,
+            "distance": None,
+        }
+
+    assert service.semantic_cache.search.call_count == 10
+    assert service.llm.generate_response.call_count == 10
+    assert service.semantic_cache.store.call_count == 10
+    assert service.analytics.record_request.call_count == 10
