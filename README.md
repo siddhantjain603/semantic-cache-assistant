@@ -694,7 +694,6 @@ Portfolio deployment is live. Production hardening items (logging, monitoring, r
 - [x] Add demo walkthrough (below, text-only).
 - [x] Perform final end-to-end verification (see verification below).
 - [x] Publish a tagged GitHub release (`v1.0.0` — run tag commands after push).
-- [ ] Demo video — optional, add link when recorded (Loom / screen recording). Not a blocker.
 
 **Demo Walkthrough (Live):**
 
