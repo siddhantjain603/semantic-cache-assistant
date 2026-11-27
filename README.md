@@ -178,8 +178,12 @@ semantic-cache-assistant/
 ├── app.py                 # Portfolio entry point (Streamlit Home)
 ├── data/
 ├── scripts/
-│   └── evaluate_threshold.py
+│   ├── evaluate_threshold.py
+│   ├── benchmark_latency.py
+│   └── plot_benchmark.py
 ├── results/
+│   ├── benchmark_latency.csv
+│   └── benchmark_latency.png
 ├── .env.example
 ├── .gitignore
 ├── .python-version
@@ -296,6 +300,15 @@ uv run ruff check .
 ```bash
 uv run python scripts/evaluate_threshold.py
 ```
+
+### 8. Run Benchmark (100+ entries)
+
+```bash
+uv run python scripts/benchmark_latency.py
+uv run python scripts/plot_benchmark.py
+```
+
+Outputs: `results/benchmark_latency.csv` + `results/benchmark_latency.png`
 
 ## API Endpoints
 
@@ -477,6 +490,27 @@ Why 0.25 and not 0.30 (old default)?
 
 > Initial testing with only easy negatives showed all thresholds 0.25-0.50 as perfect. Adding hard negatives revealed the real tradeoff. This is why eval datasets must include hard negatives.
 
+### Benchmark: 100+ Entries (M4)
+
+Run: `uv run python scripts/benchmark_latency.py` + `uv run python scripts/plot_benchmark.py`
+Cache: PortfolioSemanticCache (in-memory), threshold 0.25
+
+| Entries | Avg HIT | HIT rate | Avg MISS | MISS rate |
+|---:|---:|---:|---:|---:|
+| 10 | 38.5ms | 10.0% | 40.3ms | 100.0% |
+| 50 | 54.7ms | 40.0% | 54.9ms | 100.0% |
+| 100 | 57.7ms | 65.0% | 50.2ms | 100.0% |
+
+[Benchmark: HIT rate and latency vs cache size](results/benchmark_latency.png)
+
+Takeaway: HIT rate grows 10% → 65% as cache grows, latency stays ~50-58ms.
+MISS rate stays 100% — no false positives even at 100 entries.
+The saving is not lookup time, it is avoiding the ~2s LLM call.
+
+**LLM calls avoided (at 65% HIT rate):** 650 per 1,000 requests, 6,500 per 10,000, 65,000 per 100,000.
+**Time saved:** ~1.9s per HIT, ~21 min per 1,000 requests.
+**Cost saved:** $0 on Groq Free Tier. Illustrative paid-model saving ~$2.28 per 1,000 requests at GPT-4o pricing ($2.50 / 1M input + $10 / 1M output, ~200 input + ~300 output tokens per request).
+
 ## Current Implementation Status
 
 ### Milestone 1 — Backend Foundation
@@ -560,11 +594,11 @@ This is the project's master execution plan. Milestones should be completed in s
 - 40 automated backend tests passing (39 + 1 concurrent test `test_ask_handles_concurrent_requests`).
 - 12 tests in `test_chat_service.py` alone.
 - 8 tests in `test_llm.py` covering auth, timeout, rate-limit, 500, connection error.
-- Full-project Ruff checks passing (`ruff check --fix` applied for import sorting).
+- Full-project Ruff checks passing.
 
 ### Milestone 4 — Evaluation and Benchmarking
 
-**Status: IN PROGRESS**
+**Status: COMPLETED**
 
 - [x] Design a representative query evaluation dataset (with hard negatives).
 - [x] Include exact-match queries.
@@ -575,10 +609,17 @@ This is the project's master execution plan. Milestones should be completed in s
 - [x] Measure false-positive and false-negative rates.
 - [x] Measure semantic matching accuracy.
 - [x] Document threshold selection and trade-offs (0.25 chosen, F1 0.83).
-- [ ] Compare cache-hit and cache-miss latency with 100+ entries.
-- [ ] Estimate LLM API calls avoided.
-- [ ] Estimate cost savings.
-- [ ] Generate benchmark reports and visualizations.
+- [x] Compare cache-hit and cache-miss latency with 100+ entries.
+- [x] Estimate LLM API calls avoided.
+- [x] Estimate cost savings.
+- [x] Generate benchmark reports and visualizations.
+
+**Milestone 4 verification:**
+
+- `scripts/benchmark_latency.py` run: 100 entries → HIT 57.7ms / 65% HIT rate, MISS 50.2ms / 100% MISS rate.
+- `results/benchmark_latency.csv` + `results/benchmark_latency.png` generated via `scripts/plot_benchmark.py`.
+- LLM calls avoided: 650 per 1,000 requests at 65% HIT rate.
+- Time saved: ~1.9s per HIT. Cost: $0 on Groq Free Tier, ~$2.28 per 1,000 illustrative at GPT-4o pricing.
 
 ### Milestone 5 — Streamlit Frontend (Portfolio)
 
