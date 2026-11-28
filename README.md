@@ -31,7 +31,7 @@ Semantic Cache Assistant identifies semantically similar user queries and reuses
 | Component | Technology | Cost |
 |---|---|---|
 | Backend | Python, FastAPI, Uvicorn | Free |
-| Frontend | Streamlit | Free |
+| Frontend | Streamlit (custom dark UI, `ui/` design system) | Free |
 | Cache | Redis Stack, RedisVL (Production) / In-Memory NumPy (Portfolio) | Free |
 | Embeddings | Sentence Transformers | Free, runs locally |
 | Embedding Model | all-MiniLM-L6-v2 | Free, open-source |
@@ -101,7 +101,7 @@ Cached Answer    Groq LLM
           |
           v
    Streamlit App (Live)
-   app.py + pages/
+   app.py + pages/ + ui/
           |
           v
   core/cache.py
@@ -141,6 +141,46 @@ Full details: `docs/architecture.md`
 - Store the generated response in Redis.
 - Record a cache miss and an LLM call.
 - Return the generated response.
+
+## Frontend (Streamlit UI v2)
+
+The Streamlit app is a two-page, dark "cache console" UI. Lime means a cache **HIT** (free), amber means a **MISS** (paid LLM call).
+
+| Area | What it does |
+|---|---|
+| **Overview** (`app.py`) | Landing page: what semantic caching is, a 3-step explainer, and the three demo questions with their expected HIT / MISS result. |
+| **Playground** (`pages/1_Semantic_Cache.py`) | Ask a question, then see the trace, history and analytics. |
+| **Trace** | A four-step pipeline (embed, search, decide, serve or call Groq) plus a gauge that pins the match **distance** against the **threshold** on one scale, with latency and the matched question. |
+| **Analytics** | Total requests, hit rate (with bar), LLM calls saved, cache entries. |
+| **Sidebar** | Brand header, Overview / Playground navigation with the active page highlighted, threshold slider, Clear Cache, eval table, status card. |
+
+### Model-loading experience
+
+The first visit has to import PyTorch / sentence-transformers and load `all-MiniLM-L6-v2` (about 90 MB on first run). The loader (`ui/loader.py`) makes that wait visible and non-blocking:
+
+- The loading card appears immediately. Heavy imports run in a background thread, so the page is never blank.
+- Three phases: **1 libraries**, **2 model**, **3 seed**, with a live log.
+- On a first run the progress bar follows the **real bytes** written to the Hugging Face cache. If the model is already cached it skips the download step.
+- Loading does not block navigation. You can switch pages mid-load; coming back resumes the same job instead of restarting it.
+
+### UI code layout
+
+- `ui/theme.py`: the design system (CSS variables, hero, trace, gauge, tiles, sidebar). Every page calls `apply_theme()` once.
+- `ui/loader.py`: the boot loader described above.
+- `.streamlit/config.toml`: dark theme and `showSidebarNavigation = false` (the app renders its own sidebar nav).
+- `core/` and `backend/` are unchanged by the UI work.
+
+### Deploying UI updates (Streamlit Community Cloud)
+
+The live app at https://semantic-cache-assistant.streamlit.app is built from this repository, so updates ship by pushing code:
+
+1. Push (or merge) your changes to the branch the Streamlit app is configured to deploy, normally `main`, with main file `app.py`.
+2. Streamlit Cloud detects the new commit and redeploys automatically, usually within a minute or two. No manual step is needed.
+3. `GROQ_API_KEY` stays in the app's Secrets and is unaffected.
+4. If you push to a feature branch, the live URL does not change until it is merged, or the app's branch is switched in **Manage app → Settings**.
+5. If the page looks stale after a deploy, use **Manage app → Reboot app** and hard-refresh the browser (Ctrl+F5).
+
+> After a cold start or reboot the first visitor sees the loading card while the model downloads. Later visits reuse the cached model.
 
 ## Project Structure
 
@@ -188,7 +228,15 @@ semantic-cache-assistant/
 ├── pages/
 │   └── 1_Semantic_Cache.py # Portfolio page: Playground + Trace + Analytics
 │
-├── app.py                 # Portfolio entry point (Streamlit Home)
+├── ui/                    # Streamlit UI v2 (frontend only)
+│   ├── __init__.py
+│   ├── theme.py           # Design system: CSS, hero, trace, gauge, tiles, sidebar
+│   └── loader.py          # Non-blocking model-loading progress card
+│
+├── .streamlit/
+│   └── config.toml        # Dark theme + custom sidebar navigation
+│
+├── app.py                 # Portfolio entry point (Streamlit Overview)
 ├── data/
 ├── scripts/
 │   ├── evaluate_threshold.py
@@ -296,7 +344,15 @@ Backend URL: `http://127.0.0.1:8000`
 
 Swagger API documentation: `http://127.0.0.1:8000/docs`
 
-### 6. Run Tests
+### 6. Run the Streamlit App (Portfolio UI)
+
+```bash
+uv run streamlit run app.py
+```
+
+Open the URL shown in the terminal (usually `http://localhost:8501`) and click **Playground** in the sidebar. On the first run you will see the loading card while the embedding model downloads. Set `GROQ_API_KEY` in your environment to get real answers on a MISS; without it the app returns a demo answer.
+
+### 7. Run Tests
 
 ```bash
 uv run python -m pytest backend/tests/ -v
@@ -308,13 +364,13 @@ Run code-quality checks:
 uv run ruff check .
 ```
 
-### 7. Run Evaluation
+### 8. Run Evaluation
 
 ```bash
 uv run python scripts/evaluate_threshold.py
 ```
 
-### 8. Run Benchmark (100+ entries)
+### 9. Run Benchmark (100+ entries)
 
 ```bash
 uv run python scripts/benchmark_latency.py
@@ -648,6 +704,11 @@ This is the project's master execution plan. Milestones should be completed in s
 - [x] Add cache management controls (Clear Cache).
 - [x] Add threshold slider (default 0.25).
 - [x] Improve UI usability and error handling.
+- [x] UI v2 redesign: shared design system (`ui/theme.py`) and dark theme via `.streamlit/config.toml`.
+- [x] Custom sidebar navigation with active-page highlight (replaces Streamlit's default page list).
+- [x] Trace redesign: pipeline steps plus a distance-vs-threshold gauge.
+- [x] Real model-loading progress (libraries / model / seed phases, live byte-level download progress).
+- [x] Non-blocking load: page renders immediately and navigation works while the model loads.
 
 **Milestone 5 verification:**
 
@@ -655,8 +716,9 @@ This is the project's master execution plan. Milestones should be completed in s
 - `What is semantic caching?` -> HIT, distance 0.0132, latency 422.2 ms.
 - `Explain semantic cache` -> HIT (paraphrase).
 - `How do I reset my username?` -> MISS (hard negative).
-- Loading progress bar + status (`Warming up... Step 1/3...`) added so first model load is not blank.
-- Font system: Inter (body) + Sora (headings) + JetBrains Mono (numbers/code).
+- Loading card with real progress replaces the old static status text, so the first model load is never blank.
+- Clicking Overview during a model load returns to `/` immediately; returning to Playground resumes the same load.
+- Font system (UI v2): Bricolage Grotesque (headings) + DM Sans (body) + IBM Plex Mono (numbers/code).
 
 ### Milestone 6 — Production Engineering and Deployment
 
@@ -698,11 +760,11 @@ Portfolio deployment is live. Production hardening items (logging, monitoring, r
 **Demo Walkthrough (Live):**
 
 1. Open https://semantic-cache-assistant.streamlit.app
-2. Click **Semantic Cache** in sidebar.
+2. Click **Playground** in the sidebar.
 3. Ask: `What is semantic caching?` -> First run: MISS (Groq call), second run: HIT.
 4. Ask paraphrase: `Explain semantic cache` -> HIT (distance <= 0.25).
 5. Ask hard negative: `How do I reset my username?` -> MISS (distance > 0.25, Groq call).
-6. Observe: HIT badge, latency, cache size, Clear Cache button.
+6. Observe: HIT / MISS badge, the distance gauge against the threshold, latency, hit-rate tiles and the Clear Cache button.
 
 **Milestone 7 verification:**
 
